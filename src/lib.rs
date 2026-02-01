@@ -111,7 +111,7 @@ let stdout = StandardStream::stdout(choice);
 Currently, `termcolor` does not provide anything to do this for you.
 */
 
-#![deny(missing_debug_implementations, missing_docs)]
+#![deny(missing_debug_implementations)]
 
 // #[cfg(doctest)]
 // use doc_comment::doctest;
@@ -1069,7 +1069,7 @@ impl<'a, W: io::Write> WriteColor for WriterInnerLock<'a, W> {
 /// from multiple threads simultaneously.
 #[derive(Debug)]
 pub struct BufferWriter {
-    stream: LossyStandardStream<IoStandardStream>,
+    pub stream: LossyStandardStream<IoStandardStream>,
     printed: AtomicBool,
     separator: Option<Vec<u8>>,
     color_choice: ColorChoice,

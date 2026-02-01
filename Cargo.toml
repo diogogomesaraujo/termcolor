@@ -5,7 +5,6 @@ authors = ["Andrew Gallant <jamslam@gmail.com>"]
 description = """
 A simple cross platform library for writing colored text to a terminal.
 """
-documentation = "https://docs.rs/termcolor"
 homepage = "https://github.com/BurntSushi/termcolor"
 repository = "https://github.com/BurntSushi/termcolor"
 readme = "README.md"
