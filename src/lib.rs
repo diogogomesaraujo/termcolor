@@ -120,6 +120,7 @@ Currently, `termcolor` does not provide anything to do this for you.
 
 use std::env;
 use std::error;
+use std::error::Error;
 use std::fmt;
 use std::io::{self, Write};
 use std::str::FromStr;
@@ -127,6 +128,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(windows)]
 use std::sync::{Mutex, MutexGuard};
 
+use termion::screen::AlternateScreen;
+use termion::screen::IntoAlternateScreen;
 #[cfg(windows)]
 use winapi_util::console as wincon;
 
@@ -383,6 +386,7 @@ impl fmt::Display for ColorChoiceParseError {
 /// some simple internal enum types to work around this.
 
 enum StandardStreamType {
+    AlternativeScreenStdout,
     Stdout,
     Stderr,
     StdoutBuffered,
@@ -391,6 +395,7 @@ enum StandardStreamType {
 
 #[derive(Debug)]
 enum IoStandardStream {
+    AlternativeScreenStdout(AlternateScreen<io::Stdout>),
     Stdout(io::Stdout),
     Stderr(io::Stderr),
     StdoutBuffered(io::BufWriter<io::Stdout>),
@@ -398,27 +403,37 @@ enum IoStandardStream {
 }
 
 impl IoStandardStream {
-    fn new(sty: StandardStreamType) -> IoStandardStream {
+    fn new(
+        sty: StandardStreamType,
+    ) -> Result<IoStandardStream, Box<dyn Error>> {
         match sty {
+            StandardStreamType::AlternativeScreenStdout => {
+                Ok(IoStandardStream::AlternativeScreenStdout(
+                    io::stdout().into_alternate_screen()?,
+                ))
+            }
             StandardStreamType::Stdout => {
-                IoStandardStream::Stdout(io::stdout())
+                Ok(IoStandardStream::Stdout(io::stdout()))
             }
             StandardStreamType::Stderr => {
-                IoStandardStream::Stderr(io::stderr())
+                Ok(IoStandardStream::Stderr(io::stderr()))
             }
             StandardStreamType::StdoutBuffered => {
                 let wtr = io::BufWriter::new(io::stdout());
-                IoStandardStream::StdoutBuffered(wtr)
+                Ok(IoStandardStream::StdoutBuffered(wtr))
             }
             StandardStreamType::StderrBuffered => {
                 let wtr = io::BufWriter::new(io::stderr());
-                IoStandardStream::StderrBuffered(wtr)
+                Ok(IoStandardStream::StderrBuffered(wtr))
             }
         }
     }
 
     fn lock(&self) -> IoStandardStreamLock<'_> {
         match *self {
+            IoStandardStream::AlternativeScreenStdout(ref s) => {
+                IoStandardStreamLock::StdoutLock(s.lock())
+            }
             IoStandardStream::Stdout(ref s) => {
                 IoStandardStreamLock::StdoutLock(s.lock())
             }
@@ -439,6 +454,7 @@ impl io::Write for IoStandardStream {
     #[inline(always)]
     fn write(&mut self, b: &[u8]) -> io::Result<usize> {
         match *self {
+            IoStandardStream::AlternativeScreenStdout(ref mut s) => s.write(b),
             IoStandardStream::Stdout(ref mut s) => s.write(b),
             IoStandardStream::Stderr(ref mut s) => s.write(b),
             IoStandardStream::StdoutBuffered(ref mut s) => s.write(b),
@@ -449,6 +465,7 @@ impl io::Write for IoStandardStream {
     #[inline(always)]
     fn flush(&mut self) -> io::Result<()> {
         match *self {
+            IoStandardStream::AlternativeScreenStdout(ref mut s) => s.flush(),
             IoStandardStream::Stdout(ref mut s) => s.flush(),
             IoStandardStream::Stderr(ref mut s) => s.flush(),
             IoStandardStream::StdoutBuffered(ref mut s) => s.flush(),
@@ -549,9 +566,11 @@ impl StandardStream {
     ///
     /// The specific color/style settings can be configured when writing via
     /// the `WriteColor` trait.
-    pub fn stdout(choice: ColorChoice) -> StandardStream {
-        let wtr = WriterInner::create(StandardStreamType::Stdout, choice);
-        StandardStream { wtr: LossyStandardStream::new(wtr) }
+    pub fn stdout(
+        choice: ColorChoice,
+    ) -> Result<StandardStream, Box<dyn Error>> {
+        let wtr = WriterInner::create(StandardStreamType::Stdout, choice)?;
+        Ok(StandardStream { wtr: LossyStandardStream::new(wtr) })
     }
 
     /// Create a new `StandardStream` with the given color preferences that
@@ -562,9 +581,22 @@ impl StandardStream {
     ///
     /// The specific color/style settings can be configured when writing via
     /// the `WriteColor` trait.
-    pub fn stderr(choice: ColorChoice) -> StandardStream {
-        let wtr = WriterInner::create(StandardStreamType::Stderr, choice);
-        StandardStream { wtr: LossyStandardStream::new(wtr) }
+    pub fn stderr(
+        choice: ColorChoice,
+    ) -> Result<StandardStream, Box<dyn Error>> {
+        let wtr = WriterInner::create(StandardStreamType::Stderr, choice)?;
+        Ok(StandardStream { wtr: LossyStandardStream::new(wtr) })
+    }
+
+    /// Just the same for termion alternate
+    pub fn alterate_stdout(
+        choice: ColorChoice,
+    ) -> Result<StandardStream, Box<dyn Error>> {
+        let wtr = WriterInner::create(
+            StandardStreamType::AlternativeScreenStdout,
+            choice,
+        )?;
+        Ok(StandardStream { wtr: LossyStandardStream::new(wtr) })
     }
 
     /// Lock the underlying writer.
@@ -623,10 +655,12 @@ impl BufferedStandardStream {
     ///
     /// The specific color/style settings can be configured when writing via
     /// the `WriteColor` trait.
-    pub fn stdout(choice: ColorChoice) -> BufferedStandardStream {
+    pub fn stdout(
+        choice: ColorChoice,
+    ) -> Result<BufferedStandardStream, Box<dyn Error>> {
         let wtr =
-            WriterInner::create(StandardStreamType::StdoutBuffered, choice);
-        BufferedStandardStream { wtr: LossyStandardStream::new(wtr) }
+            WriterInner::create(StandardStreamType::StdoutBuffered, choice)?;
+        Ok(BufferedStandardStream { wtr: LossyStandardStream::new(wtr) })
     }
 
     /// Create a new `BufferedStandardStream` with the given color preferences
@@ -637,10 +671,23 @@ impl BufferedStandardStream {
     ///
     /// The specific color/style settings can be configured when writing via
     /// the `WriteColor` trait.
-    pub fn stderr(choice: ColorChoice) -> BufferedStandardStream {
+    pub fn stderr(
+        choice: ColorChoice,
+    ) -> Result<BufferedStandardStream, Box<dyn Error>> {
         let wtr =
-            WriterInner::create(StandardStreamType::StderrBuffered, choice);
-        BufferedStandardStream { wtr: LossyStandardStream::new(wtr) }
+            WriterInner::create(StandardStreamType::StderrBuffered, choice)?;
+        Ok(BufferedStandardStream { wtr: LossyStandardStream::new(wtr) })
+    }
+
+    /// Yeah
+    pub fn alternate_stdout(
+        choice: ColorChoice,
+    ) -> Result<BufferedStandardStream, Box<dyn Error>> {
+        let wtr = WriterInner::create(
+            StandardStreamType::AlternativeScreenStdout,
+            choice,
+        )?;
+        Ok(BufferedStandardStream { wtr: LossyStandardStream::new(wtr) })
     }
 }
 
@@ -651,11 +698,11 @@ impl WriterInner<IoStandardStream> {
     fn create(
         sty: StandardStreamType,
         choice: ColorChoice,
-    ) -> WriterInner<IoStandardStream> {
+    ) -> Result<WriterInner<IoStandardStream>, Box<dyn Error>> {
         if choice.should_attempt_color() {
-            WriterInner::Ansi(Ansi(IoStandardStream::new(sty)))
+            Ok(WriterInner::Ansi(Ansi(IoStandardStream::new(sty)?)))
         } else {
-            WriterInner::NoColor(NoColor(IoStandardStream::new(sty)))
+            Ok(WriterInner::NoColor(NoColor(IoStandardStream::new(sty)?)))
         }
     }
 
@@ -1037,13 +1084,16 @@ impl BufferWriter {
     /// The specific color/style settings can be configured when writing to
     /// the buffers themselves.
     #[cfg(not(windows))]
-    fn create(sty: StandardStreamType, choice: ColorChoice) -> BufferWriter {
-        BufferWriter {
-            stream: LossyStandardStream::new(IoStandardStream::new(sty)),
+    fn create(
+        sty: StandardStreamType,
+        choice: ColorChoice,
+    ) -> Result<BufferWriter, Box<dyn Error>> {
+        Ok(BufferWriter {
+            stream: LossyStandardStream::new(IoStandardStream::new(sty)?),
             printed: AtomicBool::new(false),
             separator: None,
             color_choice: choice,
-        }
+        })
     }
 
     /// Create a new `BufferWriter` that writes to a standard stream with the
@@ -1090,7 +1140,9 @@ impl BufferWriter {
     ///
     /// The specific color/style settings can be configured when writing to
     /// the buffers themselves.
-    pub fn stdout(choice: ColorChoice) -> BufferWriter {
+    pub fn stdout(
+        choice: ColorChoice,
+    ) -> Result<BufferWriter, Box<dyn Error>> {
         BufferWriter::create(StandardStreamType::Stdout, choice)
     }
 
@@ -1102,7 +1154,9 @@ impl BufferWriter {
     ///
     /// The specific color/style settings can be configured when writing to
     /// the buffers themselves.
-    pub fn stderr(choice: ColorChoice) -> BufferWriter {
+    pub fn stderr(
+        choice: ColorChoice,
+    ) -> Result<BufferWriter, Box<dyn Error>> {
         BufferWriter::create(StandardStreamType::Stderr, choice)
     }
 
