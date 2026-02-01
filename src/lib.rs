@@ -1160,6 +1160,16 @@ impl BufferWriter {
         BufferWriter::create(StandardStreamType::Stderr, choice)
     }
 
+    /// Create a new `BufferWriter.
+    pub fn alternate_stdout(
+        choice: ColorChoice,
+    ) -> Result<BufferWriter, Box<dyn Error>> {
+        BufferWriter::create(
+            StandardStreamType::AlternativeScreenStdout,
+            choice,
+        )
+    }
+
     /// If set, the separator given is printed between buffers. By default, no
     /// separator is printed.
     ///
