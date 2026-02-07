@@ -405,7 +405,7 @@ enum IoStandardStream {
 impl IoStandardStream {
     fn new(
         sty: StandardStreamType,
-    ) -> Result<IoStandardStream, Box<dyn Error>> {
+    ) -> Result<IoStandardStream, Box<dyn Error + Send + Sync>> {
         match sty {
             StandardStreamType::AlternativeScreenStdout => {
                 Ok(IoStandardStream::AlternativeScreenStdout(
@@ -568,7 +568,7 @@ impl StandardStream {
     /// the `WriteColor` trait.
     pub fn stdout(
         choice: ColorChoice,
-    ) -> Result<StandardStream, Box<dyn Error>> {
+    ) -> Result<StandardStream, Box<dyn Error + Send + Sync>> {
         let wtr = WriterInner::create(StandardStreamType::Stdout, choice)?;
         Ok(StandardStream { wtr: LossyStandardStream::new(wtr) })
     }
@@ -583,7 +583,7 @@ impl StandardStream {
     /// the `WriteColor` trait.
     pub fn stderr(
         choice: ColorChoice,
-    ) -> Result<StandardStream, Box<dyn Error>> {
+    ) -> Result<StandardStream, Box<dyn Error + Send + Sync>> {
         let wtr = WriterInner::create(StandardStreamType::Stderr, choice)?;
         Ok(StandardStream { wtr: LossyStandardStream::new(wtr) })
     }
@@ -591,7 +591,7 @@ impl StandardStream {
     /// Just the same for termion alternate
     pub fn alterate_stdout(
         choice: ColorChoice,
-    ) -> Result<StandardStream, Box<dyn Error>> {
+    ) -> Result<StandardStream, Box<dyn Error + Send + Sync>> {
         let wtr = WriterInner::create(
             StandardStreamType::AlternativeScreenStdout,
             choice,
@@ -657,7 +657,7 @@ impl BufferedStandardStream {
     /// the `WriteColor` trait.
     pub fn stdout(
         choice: ColorChoice,
-    ) -> Result<BufferedStandardStream, Box<dyn Error>> {
+    ) -> Result<BufferedStandardStream, Box<dyn Error + Send + Sync>> {
         let wtr =
             WriterInner::create(StandardStreamType::StdoutBuffered, choice)?;
         Ok(BufferedStandardStream { wtr: LossyStandardStream::new(wtr) })
@@ -673,7 +673,7 @@ impl BufferedStandardStream {
     /// the `WriteColor` trait.
     pub fn stderr(
         choice: ColorChoice,
-    ) -> Result<BufferedStandardStream, Box<dyn Error>> {
+    ) -> Result<BufferedStandardStream, Box<dyn Error + Send + Sync>> {
         let wtr =
             WriterInner::create(StandardStreamType::StderrBuffered, choice)?;
         Ok(BufferedStandardStream { wtr: LossyStandardStream::new(wtr) })
@@ -682,7 +682,7 @@ impl BufferedStandardStream {
     /// Yeah
     pub fn alternate_stdout(
         choice: ColorChoice,
-    ) -> Result<BufferedStandardStream, Box<dyn Error>> {
+    ) -> Result<BufferedStandardStream, Box<dyn Error + Send + Sync>> {
         let wtr = WriterInner::create(
             StandardStreamType::AlternativeScreenStdout,
             choice,
@@ -698,7 +698,8 @@ impl WriterInner<IoStandardStream> {
     fn create(
         sty: StandardStreamType,
         choice: ColorChoice,
-    ) -> Result<WriterInner<IoStandardStream>, Box<dyn Error>> {
+    ) -> Result<WriterInner<IoStandardStream>, Box<dyn Error + Send + Sync>>
+    {
         if choice.should_attempt_color() {
             Ok(WriterInner::Ansi(Ansi(IoStandardStream::new(sty)?)))
         } else {
@@ -1069,7 +1070,7 @@ impl<'a, W: io::Write> WriteColor for WriterInnerLock<'a, W> {
 /// from multiple threads simultaneously.
 #[derive(Debug)]
 pub struct BufferWriter {
-    pub stream: LossyStandardStream<IoStandardStream>,
+    stream: LossyStandardStream<IoStandardStream>,
     printed: AtomicBool,
     separator: Option<Vec<u8>>,
     color_choice: ColorChoice,
@@ -1087,7 +1088,7 @@ impl BufferWriter {
     fn create(
         sty: StandardStreamType,
         choice: ColorChoice,
-    ) -> Result<BufferWriter, Box<dyn Error>> {
+    ) -> Result<BufferWriter, Box<dyn Error + Send + Sync>> {
         Ok(BufferWriter {
             stream: LossyStandardStream::new(IoStandardStream::new(sty)?),
             printed: AtomicBool::new(false),
@@ -1142,7 +1143,7 @@ impl BufferWriter {
     /// the buffers themselves.
     pub fn stdout(
         choice: ColorChoice,
-    ) -> Result<BufferWriter, Box<dyn Error>> {
+    ) -> Result<BufferWriter, Box<dyn Error + Send + Sync>> {
         BufferWriter::create(StandardStreamType::Stdout, choice)
     }
 
@@ -1156,14 +1157,14 @@ impl BufferWriter {
     /// the buffers themselves.
     pub fn stderr(
         choice: ColorChoice,
-    ) -> Result<BufferWriter, Box<dyn Error>> {
+    ) -> Result<BufferWriter, Box<dyn Error + Send + Sync>> {
         BufferWriter::create(StandardStreamType::Stderr, choice)
     }
 
     /// Create a new `BufferWriter.
     pub fn alternate_stdout(
         choice: ColorChoice,
-    ) -> Result<BufferWriter, Box<dyn Error>> {
+    ) -> Result<BufferWriter, Box<dyn Error + Send + Sync>> {
         BufferWriter::create(
             StandardStreamType::AlternativeScreenStdout,
             choice,
